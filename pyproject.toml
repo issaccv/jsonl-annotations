@@ -1,0 +1,16 @@
+[project]
+name = "annotations"
+version = "0.1.0"
+description = "Terminal JSONL annotation tool"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "textual>=0.86.0",
+]
+
+[project.scripts]
+annotations = "annotation_tool.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
