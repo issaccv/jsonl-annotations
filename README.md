@@ -1,6 +1,6 @@
 # JSONL 标注工具
 
-用终端浏览 `data/` 里的 JSONL 数据，并把标注结果写到 sidecar 文件。
+用终端浏览 `data/` 里的 JSONL 数据，并把标注结果写到 sidecar 文件。详情面板默认展示自然化内容，按 `r` 可以切回原始 JSON。
 
 ## 安装
 
@@ -34,6 +34,7 @@ python -m annotations export --file data/parallel_200.jsonl
 - `n` / `p`: 下一条 / 上一条
 - `j`: 跳转到 ID 或行号
 - `f`: 切换过滤视图
+- `r`: 在自然视图和原始 JSON 之间切换
 - `o`: 查看原始来源
 - `q`: 退出
 

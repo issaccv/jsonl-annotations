@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from enum import Enum
 from pathlib import Path
 
 from rich.console import Group
@@ -16,7 +17,20 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static
 
 from .models import CaseRecord, DatasetSummary, FeedbackFilter, FeedbackRecord
+from .renderers import render_function_text, render_ground_truth_text, render_question_text
 from .storage import DataError, FeedbackStore, QUESTION_TYPE_HINTS, discover_datasets, load_cases
+
+
+class DetailViewMode(str, Enum):
+    NATURAL = "natural"
+    JSON = "json"
+
+    @property
+    def label(self) -> str:
+        return {
+            self.NATURAL: "自然",
+            self.JSON: "原始 JSON",
+        }[self]
 
 
 class TextInputScreen(ModalScreen[str | None]):
@@ -277,6 +291,7 @@ class AnnotationApp(App[None]):
         Binding("p", "prev_case", "上一条"),
         Binding("j", "jump_to_case", "跳转"),
         Binding("f", "change_filter", "过滤"),
+        Binding("r", "toggle_detail_view", "切换视图"),
         Binding("o", "show_source", "来源"),
         Binding("q", "quit", "退出"),
     ]
@@ -294,6 +309,7 @@ class AnnotationApp(App[None]):
         self.cases: list[CaseRecord] = []
         self.feedback_map: dict[tuple[str, str], FeedbackRecord] = {}
         self.filter_mode = FeedbackFilter.ALL
+        self.detail_view_mode = DetailViewMode.NATURAL
         self.filtered_indices: list[int] = []
         self.current_index = 0
         self.status_message = "准备就绪"
@@ -408,6 +424,14 @@ class AnnotationApp(App[None]):
         if hint:
             body += f"\n\nBFCL question_type 说明:\n{case.question_type} - {hint}"
         self.push_screen(MessageScreen("原始来源", body))
+
+    def action_toggle_detail_view(self) -> None:
+        if self.detail_view_mode is DetailViewMode.NATURAL:
+            self.detail_view_mode = DetailViewMode.JSON
+        else:
+            self.detail_view_mode = DetailViewMode.NATURAL
+        self._set_status(f"详情视图已切换为 {self.detail_view_mode.label}")
+        self._refresh_view()
 
     def _handle_dataset_selection(self, selected: Path | None) -> None:
         if selected is None:
@@ -587,7 +611,7 @@ class AnnotationApp(App[None]):
             "\n".join(
                 [
                     f"[b]{dataset_name}[/b]  进度 {done}/{total}  不好 {bad}  过滤 {self.filter_mode.label}",
-                    f"当前 {current_position}/{filtered_total}  绝对行号 {self.current_index + 1 if self.cases else 0}",
+                    f"当前 {current_position}/{filtered_total}  绝对行号 {self.current_index + 1 if self.cases else 0}  视图 {self.detail_view_mode.label}",
                 ]
             )
         )
@@ -613,6 +637,13 @@ class AnnotationApp(App[None]):
         syntax = Syntax(content, "json", word_wrap=True, line_numbers=False)
         return Panel(syntax, title=title, border_style="blue")
 
+    def _render_text_panel(self, title: str, content: str) -> Panel:
+        return Panel(Text(content), title=title, border_style="blue")
+
+    def _render_code_panel(self, title: str, content: str) -> Panel:
+        syntax = Syntax(content, "python", word_wrap=True, line_numbers=False)
+        return Panel(syntax, title=title, border_style="blue")
+
     def _render_body(self) -> object:
         case = self.current_case
         if case is None:
@@ -624,10 +655,25 @@ class AnnotationApp(App[None]):
 
         return Group(
             Panel(self._render_metadata_table(case), title=f"Case {case.line_number}/{len(self.cases)}", border_style="green"),
-            self._render_json_panel("question", case.question),
-            self._render_json_panel("function", case.function),
-            self._render_json_panel("ground_truth", case.ground_truth),
+            self._render_question_panel(case),
+            self._render_function_panel(case),
+            self._render_ground_truth_panel(case),
         )
+
+    def _render_question_panel(self, case: CaseRecord) -> Panel:
+        if self.detail_view_mode is DetailViewMode.JSON:
+            return self._render_json_panel("question", case.question)
+        return self._render_text_panel("question", render_question_text(case.question))
+
+    def _render_function_panel(self, case: CaseRecord) -> Panel:
+        if self.detail_view_mode is DetailViewMode.JSON:
+            return self._render_json_panel("function", case.function)
+        return self._render_code_panel("function", render_function_text(case.function))
+
+    def _render_ground_truth_panel(self, case: CaseRecord) -> Panel:
+        if self.detail_view_mode is DetailViewMode.JSON:
+            return self._render_json_panel("ground_truth", case.ground_truth)
+        return self._render_code_panel("ground_truth", render_ground_truth_text(case.ground_truth))
 
     def _refresh_view(self) -> None:
         self.query_one("#summary", Static).update(self._render_summary())
