@@ -1,0 +1,30 @@
+name: mc
+version: 1
+priority: 95
+match:
+  file_glob:
+    - mc*.jsonl
+metadata_fields:
+  - type
+  - question_type
+  - language
+  - source
+panels:
+  - title: question
+    source_key: question
+    formatter: text_value
+    kind: text
+  - title: options
+    source_key: options
+    formatter: options_list
+    kind: text
+  - title: answer
+    source_key: answer
+    formatter: answer_labels
+    kind: text
+  - title: solution
+    source_key: solution
+    formatter: text_value
+    kind: text
+fallback:
+  auto_extra: true

@@ -1,17 +1,26 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
 from pathlib import Path
 
-from annotation_tool.adapters import adapt_case
+from annotation_tool.adapters import SchemaConfigError, adapt_case, clear_schema_cache
 from annotation_tool.models import CaseRecord, SectionKind
 
 
 class AdapterTests(unittest.TestCase):
-    def _case(self, row: dict[str, object], line_number: int = 1) -> CaseRecord:
+    def setUp(self) -> None:
+        clear_schema_cache()
+
+    def _case(
+        self,
+        row: dict[str, object],
+        line_number: int = 1,
+        dataset_name: str = "parallel_200.jsonl",
+    ) -> CaseRecord:
         return CaseRecord(
-            dataset_path=Path("data/sample.jsonl"),
-            source_file="data/sample.jsonl",
+            dataset_path=Path("data") / dataset_name,
+            source_file=f"data/{dataset_name}",
             line_number=line_number,
             raw=row,
         )
@@ -28,7 +37,7 @@ class AdapterTests(unittest.TestCase):
             "type": "可观测性",
         }
 
-        canonical = adapt_case(self._case(row))
+        canonical = adapt_case(self._case(row, dataset_name="parallel_200.jsonl"))
 
         self.assertEqual(canonical.metadata["schema"], "parallel")
         self.assertEqual([section.key for section in canonical.sections], ["question", "function", "ground_truth"])
@@ -49,7 +58,7 @@ class AdapterTests(unittest.TestCase):
             "type": "用户手册说明",
         }
 
-        canonical = adapt_case(self._case(row))
+        canonical = adapt_case(self._case(row, dataset_name="qa_900.jsonl"))
 
         self.assertEqual(canonical.metadata["schema"], "qa")
         self.assertEqual([section.key for section in canonical.sections[:3]], ["question", "answer", "solution"])
@@ -73,7 +82,7 @@ class AdapterTests(unittest.TestCase):
             "type": "用户手册说明",
         }
 
-        canonical = adapt_case(self._case(row))
+        canonical = adapt_case(self._case(row, dataset_name="mc_900.jsonl"))
 
         self.assertEqual(canonical.metadata["schema"], "mc")
         self.assertEqual(
@@ -90,12 +99,30 @@ class AdapterTests(unittest.TestCase):
             "metadata": {"domain": "docs"},
         }
 
-        canonical = adapt_case(self._case(row))
+        canonical = adapt_case(self._case(row, dataset_name="unknown_900.jsonl"))
 
         self.assertEqual(canonical.metadata["schema"], "generic")
         self.assertEqual(len(canonical.sections), 1)
         self.assertEqual(canonical.sections[0].key, "extra")
         self.assertEqual(canonical.sections[0].kind, SectionKind.JSON)
+
+    def test_invalid_schema_file_raises_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir)
+            (data_dir / "broken.schema.yaml").write_text(
+                "name: broken\nmatch: {}\npanels: []\n",
+                encoding="utf-8",
+            )
+            row = {"id": "broken_1", "question": "q"}
+            case = CaseRecord(
+                dataset_path=data_dir / "broken.jsonl",
+                source_file="broken.jsonl",
+                line_number=1,
+                raw=row,
+            )
+            clear_schema_cache()
+            with self.assertRaises(SchemaConfigError):
+                adapt_case(case)
 
 
 if __name__ == "__main__":

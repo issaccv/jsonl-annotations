@@ -1,0 +1,26 @@
+name: parallel
+version: 1
+priority: 100
+match:
+  file_glob:
+    - parallel*.jsonl
+metadata_fields:
+  - type
+  - question_type
+  - language
+  - source
+panels:
+  - title: question
+    source_key: question
+    formatter: conversation
+    kind: text
+  - title: function
+    source_key: function
+    formatter: function_signature
+    kind: code
+  - title: ground_truth
+    source_key: ground_truth
+    formatter: tool_calls
+    kind: code
+fallback:
+  auto_extra: true

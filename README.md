@@ -1,6 +1,6 @@
 # JSONL 标注工具
 
-用终端浏览 `data/` 里的 JSONL 数据，并把标注结果写到 sidecar 文件。详情面板默认展示自然化内容，按 `r` 可以切回原始 JSON。当前内置适配 `parallel`、`qa`、`mc` 三类 schema，未知 schema 会自动降级为通用展示。
+用终端浏览 `data/` 里的 JSONL 数据，并把标注结果写到 sidecar 文件。详情面板默认展示自然化内容，按 `r` 可以切回原始 JSON。面板映射由 `data/*.schema.yaml` 配置驱动，未知 schema 会自动降级为通用展示。
 
 ## 安装
 
@@ -46,3 +46,36 @@ python -m annotations export --file data/parallel_200.jsonl
 
 - sidecar: `annotations/<dataset>.feedback.jsonl`
 - 导出: `data/<dataset>.annotated.jsonl`
+
+## Schema 映射配置
+
+每个 schema 用一个 `data/*.schema.yaml` 描述：
+
+```yaml
+name: qa
+version: 1
+match:
+  file_glob: qa*.jsonl
+metadata_fields: [type, question_type, language, source, output_requirement]
+panels:
+  - title: question
+    source_key: question
+    formatter: text_value
+    kind: text
+  - title: answer
+    source_key: answer
+    formatter: text_value
+    kind: text
+fallback:
+  auto_extra: true
+```
+
+内置 formatter:
+
+- `text_value`
+- `conversation`
+- `function_signature`
+- `tool_calls`
+- `options_list`
+- `answer_labels`
+- `json`

@@ -16,7 +16,7 @@ from textual.containers import Container, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static
 
-from .adapters import adapt_case
+from .adapters import SchemaConfigError, adapt_case
 from .models import (
     CanonicalCase,
     CaseRecord,
@@ -334,7 +334,7 @@ class AnnotationApp(App[None]):
     def on_mount(self) -> None:
         try:
             self.summaries = self._load_dataset_summaries()
-        except DataError as exc:
+        except (DataError, SchemaConfigError) as exc:
             raise SystemExit(str(exc)) from exc
 
         if self.initial_dataset:
@@ -512,7 +512,7 @@ class AnnotationApp(App[None]):
             self.cases = load_cases(self.dataset_path, self.project_root)
             self.canonical_cases = [adapt_case(case) for case in self.cases]
             self.feedback_map = self.store.load_feedback_map(self.dataset_path)
-        except DataError as exc:
+        except (DataError, SchemaConfigError) as exc:
             raise SystemExit(str(exc)) from exc
 
         if not self.cases:

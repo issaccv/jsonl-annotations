@@ -1,0 +1,27 @@
+name: qa
+version: 1
+priority: 90
+match:
+  file_glob:
+    - qa*.jsonl
+metadata_fields:
+  - type
+  - question_type
+  - language
+  - source
+  - output_requirement
+panels:
+  - title: question
+    source_key: question
+    formatter: text_value
+    kind: text
+  - title: answer
+    source_key: answer
+    formatter: text_value
+    kind: text
+  - title: solution
+    source_key: solution
+    formatter: text_value
+    kind: text
+fallback:
+  auto_extra: true

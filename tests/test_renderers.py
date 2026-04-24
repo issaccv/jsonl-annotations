@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -110,6 +111,10 @@ class RendererTests(unittest.TestCase):
 
 
 class AnnotationAppToggleTests(unittest.TestCase):
+    def _write_schema(self, data_dir: Path, name: str, content: str) -> None:
+        body = textwrap.dedent(content).strip() + "\n"
+        (data_dir / f"{name}.schema.yaml").write_text(body, encoding="utf-8")
+
     def test_toggle_detail_view_switches_modes(self) -> None:
         try:
             from annotation_tool.app import AnnotationApp, DetailViewMode
@@ -159,6 +164,32 @@ class AnnotationAppToggleTests(unittest.TestCase):
                 root = Path(temp_dir)
                 data_dir = root / "data"
                 data_dir.mkdir()
+                self._write_schema(
+                    data_dir,
+                    "qa",
+                    """
+                    name: qa
+                    version: 1
+                    match:
+                      file_glob: qa*.jsonl
+                    metadata_fields: [type, question_type, language, source, output_requirement]
+                    panels:
+                      - title: question
+                        source_key: question
+                        formatter: text_value
+                        kind: text
+                      - title: answer
+                        source_key: answer
+                        formatter: text_value
+                        kind: text
+                      - title: solution
+                        source_key: solution
+                        formatter: text_value
+                        kind: text
+                    fallback:
+                      auto_extra: true
+                    """,
+                )
                 dataset = data_dir / "qa.jsonl"
                 row = {
                     "id": "qa_0",
@@ -198,6 +229,36 @@ class AnnotationAppToggleTests(unittest.TestCase):
                 root = Path(temp_dir)
                 data_dir = root / "data"
                 data_dir.mkdir()
+                self._write_schema(
+                    data_dir,
+                    "mc",
+                    """
+                    name: mc
+                    version: 1
+                    match:
+                      file_glob: mc*.jsonl
+                    metadata_fields: [type, question_type, language, source]
+                    panels:
+                      - title: question
+                        source_key: question
+                        formatter: text_value
+                        kind: text
+                      - title: options
+                        source_key: options
+                        formatter: options_list
+                        kind: text
+                      - title: answer
+                        source_key: answer
+                        formatter: answer_labels
+                        kind: text
+                      - title: solution
+                        source_key: solution
+                        formatter: text_value
+                        kind: text
+                    fallback:
+                      auto_extra: true
+                    """,
+                )
                 dataset = data_dir / "mc.jsonl"
                 row = {
                     "id": "mc_0",
