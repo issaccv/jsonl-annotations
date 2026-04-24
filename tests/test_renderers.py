@@ -7,9 +7,12 @@ import unittest
 from pathlib import Path
 
 from annotation_tool.renderers import (
+    render_mc_answer_text,
+    render_mc_options_text,
     render_function_text,
     render_ground_truth_text,
     render_question_text,
+    render_text_value,
 )
 
 
@@ -85,6 +88,26 @@ class RendererTests(unittest.TestCase):
         self.assertIn('resource_path="/run/docker/plugins/flocker.sock",', rendered)
         self.assertIn("replicas=[1, 2],", rendered)
 
+    def test_render_text_value_handles_scalars_and_collections(self) -> None:
+        self.assertEqual(render_text_value("plain"), "plain")
+        self.assertEqual(render_text_value(["a", "b"]), "a\nb")
+        self.assertIn('"nested": true', render_text_value({"nested": True}))
+        self.assertEqual(render_text_value(None), "-")
+
+    def test_render_mc_options_text_formats_keyed_options(self) -> None:
+        options = [
+            {"key": "A", "text": "first"},
+            {"key": "B", "text": "second"},
+        ]
+
+        rendered = render_mc_options_text(options)
+
+        self.assertEqual(rendered, "[A] first\n[B] second")
+
+    def test_render_mc_answer_text_formats_answer_labels(self) -> None:
+        self.assertEqual(render_mc_answer_text(["A", "C"]), "A, C")
+        self.assertEqual(render_mc_answer_text([]), "-")
+
 
 class AnnotationAppToggleTests(unittest.TestCase):
     def test_toggle_detail_view_switches_modes(self) -> None:
@@ -122,6 +145,88 @@ class AnnotationAppToggleTests(unittest.TestCase):
                     await pilot.press("r")
                     await pilot.pause()
                     self.assertEqual(app.detail_view_mode, DetailViewMode.NATURAL)
+
+        asyncio.run(scenario())
+
+    def test_qa_dataset_builds_question_answer_solution_sections(self) -> None:
+        try:
+            from annotation_tool.app import AnnotationApp
+        except ModuleNotFoundError as exc:
+            self.skipTest(str(exc))
+
+        async def scenario() -> None:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                data_dir = root / "data"
+                data_dir.mkdir()
+                dataset = data_dir / "qa.jsonl"
+                row = {
+                    "id": "qa_0",
+                    "question": "在配置之前需要什么？",
+                    "answer": "先申请密钥。",
+                    "output_requirement": "自然语言说明",
+                    "solution": "提取前置步骤。",
+                    "source": "https://example.com/doc",
+                    "type": "用户手册说明",
+                    "question_type": "qa",
+                    "language": "zh",
+                }
+                dataset.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+
+                app = AnnotationApp(project_root=root, data_dir=data_dir, initial_dataset=dataset)
+                async with app.run_test() as pilot:
+                    await pilot.pause()
+                    canonical = app.current_canonical_case
+                    self.assertIsNotNone(canonical)
+                    assert canonical is not None
+                    self.assertEqual(
+                        [section.key for section in canonical.sections[:3]],
+                        ["question", "answer", "solution"],
+                    )
+                    self.assertEqual(canonical.metadata.get("output_requirement"), "自然语言说明")
+
+        asyncio.run(scenario())
+
+    def test_mc_dataset_builds_options_panel(self) -> None:
+        try:
+            from annotation_tool.app import AnnotationApp
+        except ModuleNotFoundError as exc:
+            self.skipTest(str(exc))
+
+        async def scenario() -> None:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                data_dir = root / "data"
+                data_dir.mkdir()
+                dataset = data_dir / "mc.jsonl"
+                row = {
+                    "id": "mc_0",
+                    "question": "Which actions are valid?",
+                    "options": [
+                        {"key": "A", "text": "First option"},
+                        {"key": "B", "text": "Second option"},
+                    ],
+                    "answer": ["A", "B"],
+                    "solution": "Choose the documented options.",
+                    "source": "https://example.com/mc",
+                    "type": "用户手册说明",
+                    "question_type": "mc",
+                    "language": "en",
+                }
+                dataset.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+
+                app = AnnotationApp(project_root=root, data_dir=data_dir, initial_dataset=dataset)
+                async with app.run_test() as pilot:
+                    await pilot.pause()
+                    canonical = app.current_canonical_case
+                    self.assertIsNotNone(canonical)
+                    assert canonical is not None
+                    self.assertEqual(
+                        [section.key for section in canonical.sections[:4]],
+                        ["question", "options", "answer", "solution"],
+                    )
+                    self.assertEqual(canonical.sections[1].rendered, "[A] First option\n[B] Second option")
+                    self.assertEqual(canonical.sections[2].rendered, "A, B")
 
         asyncio.run(scenario())
 

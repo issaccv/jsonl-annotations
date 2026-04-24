@@ -16,8 +16,16 @@ from textual.containers import Container, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static
 
-from .models import CaseRecord, DatasetSummary, FeedbackFilter, FeedbackRecord
-from .renderers import render_function_text, render_ground_truth_text, render_question_text
+from .adapters import adapt_case
+from .models import (
+    CanonicalCase,
+    CaseRecord,
+    CaseSection,
+    DatasetSummary,
+    FeedbackFilter,
+    FeedbackRecord,
+    SectionKind,
+)
 from .storage import DataError, FeedbackStore, QUESTION_TYPE_HINTS, discover_datasets, load_cases
 
 
@@ -307,6 +315,7 @@ class AnnotationApp(App[None]):
         self.summaries: list[DatasetSummary] = []
         self.dataset_path: Path | None = None
         self.cases: list[CaseRecord] = []
+        self.canonical_cases: list[CanonicalCase] = []
         self.feedback_map: dict[tuple[str, str], FeedbackRecord] = {}
         self.filter_mode = FeedbackFilter.ALL
         self.detail_view_mode = DetailViewMode.NATURAL
@@ -415,14 +424,16 @@ class AnnotationApp(App[None]):
         self.push_screen(ChoiceScreen("选择过滤视图", options), self._handle_filter_change)
 
     def action_show_source(self) -> None:
-        case = self.current_case
-        if case is None:
+        canonical_case = self.current_canonical_case
+        if canonical_case is None:
             self._set_status("当前没有来源可查看")
             return
-        hint = QUESTION_TYPE_HINTS.get(case.question_type, "")
-        body = f"case: {case.id}\n\nsource:\n{case.source}"
+        question_type = canonical_case.metadata.get("question_type", "")
+        hint = QUESTION_TYPE_HINTS.get(question_type, "")
+        source = canonical_case.metadata.get("source", "")
+        body = f"case: {canonical_case.case_id}\n\nsource:\n{source}"
         if hint:
-            body += f"\n\nBFCL question_type 说明:\n{case.question_type} - {hint}"
+            body += f"\n\nBFCL question_type 说明:\n{question_type} - {hint}"
         self.push_screen(MessageScreen("原始来源", body))
 
     def action_toggle_detail_view(self) -> None:
@@ -499,6 +510,7 @@ class AnnotationApp(App[None]):
         try:
             self.dataset_path = dataset_path.resolve()
             self.cases = load_cases(self.dataset_path, self.project_root)
+            self.canonical_cases = [adapt_case(case) for case in self.cases]
             self.feedback_map = self.store.load_feedback_map(self.dataset_path)
         except DataError as exc:
             raise SystemExit(str(exc)) from exc
@@ -594,6 +606,16 @@ class AnnotationApp(App[None]):
             return None
         return self.cases[self.current_index]
 
+    @property
+    def current_canonical_case(self) -> CanonicalCase | None:
+        if (
+            not self.canonical_cases
+            or not self.filtered_indices
+            or self.current_index not in self.filtered_indices
+        ):
+            return None
+        return self.canonical_cases[self.current_index]
+
     def _render_summary(self) -> Text:
         dataset_name = self.dataset_path.name if self.dataset_path else "未选择"
         total = len(self.cases)
@@ -616,18 +638,28 @@ class AnnotationApp(App[None]):
             )
         )
 
-    def _render_metadata_table(self, case: CaseRecord) -> Table:
+    def _render_metadata_table(self, case: CaseRecord, canonical_case: CanonicalCase) -> Table:
         table = Table.grid(expand=True)
         table.add_column(style="bold cyan", ratio=1)
         table.add_column(ratio=4)
-        table.add_row("id", case.id)
-        table.add_row("type", case.type_label or "-")
-        table.add_row("question_type", case.question_type or "-")
-        hint = QUESTION_TYPE_HINTS.get(case.question_type, "")
+        table.add_row("id", canonical_case.case_id)
+        metadata = canonical_case.metadata
+
+        ordered_keys = ["schema", "type", "question_type", "language", "source", "output_requirement"]
+        for key in ordered_keys:
+            value = metadata.get(key)
+            if value:
+                table.add_row(key, value)
+
+        for key, value in metadata.items():
+            if key in ordered_keys or not value:
+                continue
+            table.add_row(key, value)
+
+        question_type = metadata.get("question_type", "")
+        hint = QUESTION_TYPE_HINTS.get(question_type, "")
         if hint:
             table.add_row("BFCL hint", hint)
-        table.add_row("language", case.language or "-")
-        table.add_row("source", case.source or "-")
         feedback = self._feedback_for_case(case) or "未标注"
         table.add_row("iteration_feedback", feedback)
         return table
@@ -646,34 +678,41 @@ class AnnotationApp(App[None]):
 
     def _render_body(self) -> object:
         case = self.current_case
-        if case is None:
+        canonical_case = self.current_canonical_case
+        if case is None or canonical_case is None:
             return Panel(
                 Text(f"{self.filter_mode.label} 里还没有可展示的 case", justify="center"),
                 title="空结果",
                 border_style="yellow",
             )
 
-        return Group(
-            Panel(self._render_metadata_table(case), title=f"Case {case.line_number}/{len(self.cases)}", border_style="green"),
-            self._render_question_panel(case),
-            self._render_function_panel(case),
-            self._render_ground_truth_panel(case),
-        )
+        sections = canonical_case.sections or [
+            CaseSection(
+                key="raw",
+                title="raw",
+                kind=SectionKind.JSON,
+                rendered=json.dumps(canonical_case.raw, ensure_ascii=False, indent=2),
+                raw=canonical_case.raw,
+            )
+        ]
+        panels = [
+            Panel(
+                self._render_metadata_table(case, canonical_case),
+                title=f"Case {case.line_number}/{len(self.cases)}",
+                border_style="green",
+            )
+        ]
+        panels.extend(self._render_section_panel(section) for section in sections)
+        return Group(*panels)
 
-    def _render_question_panel(self, case: CaseRecord) -> Panel:
+    def _render_section_panel(self, section: CaseSection) -> Panel:
         if self.detail_view_mode is DetailViewMode.JSON:
-            return self._render_json_panel("question", case.question)
-        return self._render_text_panel("question", render_question_text(case.question))
-
-    def _render_function_panel(self, case: CaseRecord) -> Panel:
-        if self.detail_view_mode is DetailViewMode.JSON:
-            return self._render_json_panel("function", case.function)
-        return self._render_code_panel("function", render_function_text(case.function))
-
-    def _render_ground_truth_panel(self, case: CaseRecord) -> Panel:
-        if self.detail_view_mode is DetailViewMode.JSON:
-            return self._render_json_panel("ground_truth", case.ground_truth)
-        return self._render_code_panel("ground_truth", render_ground_truth_text(case.ground_truth))
+            return self._render_json_panel(section.title, section.raw)
+        if section.kind is SectionKind.CODE:
+            return self._render_code_panel(section.title, section.rendered)
+        if section.kind is SectionKind.JSON:
+            return self._render_json_panel(section.title, section.raw)
+        return self._render_text_panel(section.title, section.rendered)
 
     def _refresh_view(self) -> None:
         self.query_one("#summary", Static).update(self._render_summary())

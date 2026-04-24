@@ -90,6 +90,27 @@ class FeedbackStoreTests(unittest.TestCase):
         self.assertEqual(summary.annotated_cases, 1)
         self.assertEqual(summary.bad_cases, 0)
 
+    def test_missing_id_falls_back_to_line_number_key(self) -> None:
+        dataset_path = self.data_dir / "missing_id.jsonl"
+        row = {
+            "question": "plain question",
+            "answer": "plain answer",
+            "solution": "plain solution",
+            "source": "https://example.com/missing-id",
+            "type": "用户手册说明",
+            "question_type": "qa",
+            "language": "zh",
+        }
+        dataset_path.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+
+        store = FeedbackStore(self.root)
+        cases = load_cases(dataset_path, self.root)
+        self.assertEqual(cases[0].id, "line-1")
+
+        store.write_feedback(dataset_path, cases[0], "好")
+        feedback_map = store.load_feedback_map(dataset_path)
+        self.assertEqual(store.resolve_feedback(cases[0], feedback_map), "好")
+
 
 if __name__ == "__main__":
     unittest.main()

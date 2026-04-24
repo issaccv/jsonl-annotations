@@ -5,7 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .models import CaseRecord, DatasetSummary, FeedbackRecord
+from .adapters import adapt_case
+from .models import CanonicalCase, CaseRecord, DatasetSummary, FeedbackRecord
 
 
 class DataError(RuntimeError):
@@ -85,6 +86,10 @@ def load_cases(dataset_path: Path, project_root: Path) -> list[CaseRecord]:
             )
         )
     return cases
+
+
+def load_canonical_cases(dataset_path: Path, project_root: Path) -> list[CanonicalCase]:
+    return [adapt_case(case) for case in load_cases(dataset_path, project_root)]
 
 
 class FeedbackStore:

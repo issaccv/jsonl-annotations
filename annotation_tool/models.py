@@ -20,6 +20,12 @@ class FeedbackFilter(str, Enum):
         }[self]
 
 
+class SectionKind(str, Enum):
+    TEXT = "text"
+    CODE = "code"
+    JSON = "json"
+
+
 @dataclass(frozen=True)
 class CaseRecord:
     dataset_path: Path
@@ -72,6 +78,25 @@ class CaseRecord:
     @property
     def lookup_key(self) -> tuple[str, str]:
         return (self.source_file, self.id)
+
+
+@dataclass(frozen=True)
+class CaseSection:
+    key: str
+    title: str
+    kind: SectionKind
+    rendered: str
+    raw: Any
+
+
+@dataclass(frozen=True)
+class CanonicalCase:
+    case_id: str
+    source_file: str
+    line_number: int
+    metadata: dict[str, str]
+    sections: list[CaseSection]
+    raw: dict[str, Any]
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 # JSONL 标注工具
 
-用终端浏览 `data/` 里的 JSONL 数据，并把标注结果写到 sidecar 文件。详情面板默认展示自然化内容，按 `r` 可以切回原始 JSON。
+用终端浏览 `data/` 里的 JSONL 数据，并把标注结果写到 sidecar 文件。详情面板默认展示自然化内容，按 `r` 可以切回原始 JSON。当前内置适配 `parallel`、`qa`、`mc` 三类 schema，未知 schema 会自动降级为通用展示。
 
 ## 安装
 
@@ -18,6 +18,10 @@ python -m annotations
 
 ```bash
 python -m annotations --file data/parallel_200.jsonl
+# 或
+python -m annotations --file data/qa_900.jsonl
+# 或
+python -m annotations --file data/mc_900.jsonl
 ```
 
 导出合并结果：

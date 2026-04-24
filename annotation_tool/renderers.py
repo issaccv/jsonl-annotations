@@ -8,6 +8,45 @@ def dump_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
+def render_text_value(value: object) -> str:
+    if value is None:
+        return "-"
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        if all(isinstance(item, str) for item in value):
+            return "\n".join(value)
+        return dump_json(value)
+    if isinstance(value, dict):
+        return dump_json(value)
+    return str(value)
+
+
+def render_mc_options_text(options: object) -> str:
+    if not isinstance(options, list):
+        return render_text_value(options)
+    if not options:
+        return "-"
+
+    lines: list[str] = []
+    for item in options:
+        if isinstance(item, dict):
+            key = item.get("key")
+            text = item.get("text")
+            if isinstance(key, str) and key.strip():
+                lines.append(f"[{key.strip()}] {render_text_value(text)}")
+                continue
+        lines.append(dump_json(item))
+    return "\n".join(lines) if lines else "-"
+
+
+def render_mc_answer_text(answer: object) -> str:
+    if isinstance(answer, list):
+        labels = [item.strip() for item in answer if isinstance(item, str) and item.strip()]
+        return ", ".join(labels) if labels else "-"
+    return render_text_value(answer)
+
+
 def render_question_text(question: object) -> str:
     blocks = _coerce_question_blocks(question)
     if blocks is None:
